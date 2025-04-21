@@ -123,6 +123,37 @@ OFPT_GET_CONFIG_REPLY (xid=0x4): frags=normal miss_send_len=0
 ## OpenFlow Message
 讲下常见的 OpenFlow Message. (waiting for implementing)
 
+对三类消息分别讲解.
+- symmetric
+- controller-to-switch
+- asynchronous
+
+仅说明概念和作用, 具体的实操还得到 Ryu 章节, 可以先过一遍.
+
+### Symmetric 消息
+- `Hello`, 是 controller 与 switch 建立连接时首先交换的消息, 用于协商双方支持的 OpenFlow 版本号
+- `Echo`, 用于心跳检测 (判断对方是否在线) 以及测量网络性能, 该消息体可携带任何内容, 有两种类型:
+    * `Echo Request`, 主动发起探测
+    * `Echo Reply`, 需立刻响应, 否则认为连接断开
+- `Experimenter`, 为厂商自定义功能提供的扩展机制, 允许在标准协议之外实现实验性功能
+
+### Controller-to-switch 消息
+- `Features`, controller 发送 `feature request`获取交换机的硬件/协议能力, switch 用 `feature reply` 回复. 一般在 OpenFlow 通道建立后立即执行
+- `Configuration`, 分两类:
+    * `Set-Config`, 控制器设置交换机参数
+    * `Get-Config`, 控制器查询交换机参数
+- `Modify-State`, 用于 `add`, `delete`, `modify` 交换机的 flow/group entries, 以及设置 switch port 的参数
+- `Read-State`, 用于从 switch 收集信息, 如当前配置, 统计信息等
+- `Packet-out`, 让 switch 从指定端口发送一个数据包或者指示 switch 转发 `Packet-in` 消息中包含的数据包. 这个消息必须包含一个完整的 packet 或者 `buffer id` (指定缓存在 switch 中的一个数据包).
+- `Barrier`, 用于确保在读取交换机状态前, 修改已经完成. switch 在收到 `Barrier Request` 时, 会暂停处理后续的消息, 先完成所有先前未处理的 `Modify-State` 消息, 最后返回 `Barrier Reply`, 表示同步点已完成
+- `Role-Request`, 用于多控制器的场景, 设置 openflow channel 的角色, 或者查询 channel 的角色
+- `Asynchronous-Configuration`, 用于为 asynchronous message 设置 filter, 或者查询 filter 信息
+
+### Asynchronous 消息
+- `Packet-in`, 将一个数据包 (或 header 以及 buffer id) 发往 controller
+- `Flow-Removed`, 当一个 flow entry 从 flow table 中移除时通知 controller 
+- `Port-status`, 当 switch port 状态变化时通知 controller
+- `Error`, 用于主动向 controller 通报告警信息
 
 ## OpenFlow channel
 讲下 channel 建立的细节. (waiting for implementing)
