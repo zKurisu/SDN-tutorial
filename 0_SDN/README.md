@@ -6,7 +6,7 @@ SDN, Software Define Network, 软件定义网络 (后面解释为什么叫这个
 需要注意, SDN 不是一个具体的协议或者实现, 而是一种架构理念, 只要满足上述特征都可以称为 SDN.
 
 下面图对比传统网络架构和 SDN 架构:
-![](./img/sdn-structure.png)
+![Traditional and SDN Network structure](./img/sdn-structure.png)
 
 在 SDN 中, 可以把交换机视为没有 control plane 的纯粹的转发设备, 其转发操作根据 "流表" (后续提及) 进行.
 
@@ -22,7 +22,7 @@ sudo systemctl start ovs-vswitchd
 可能还有其他依赖, 可以根据报错安装.
 
 这里的示例, 通过创建一个 OpenFlow 交换机 (什么是 OpenFlow 在下一节讲), 给交换机添加两个 `ports`, 分别连接一个虚拟机 (`vm1` 和 `vm2`), 给 `ports` 分配 IP 地址之后, 通过更改流表测试连通性. 结构大致为:
-![](./img/flow-table-example-structure.png)
+![Example network structure](./img/flow-table-example-structure.png)
 
 ### 交换机和接口设置
 创建一个虚拟交换机 (也可以叫网桥):
@@ -107,7 +107,7 @@ ping 192.168.1.200
 ```
 
 结果如:
-![](./img/vm2-ping-vm1-ok.png)
+![Ping OK Result](./img/vm2-ping-vm1-ok.png)
 
 能够 ping 通.
 
@@ -145,7 +145,7 @@ sudo ovs-ofctl add-flow ovs-br0 "priority=100, in_port=4, actions=drop"
 ```sh
 ping 192.168.1.200
 ```
-![](./img/vm2-ping-vm1-notok.png)
+![Ping unreachable result](./img/vm2-ping-vm1-notok.png)
 
 此时无法 `ping` 通. 符合假设的结果
 
