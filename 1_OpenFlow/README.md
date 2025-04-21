@@ -156,7 +156,34 @@ OFPT_GET_CONFIG_REPLY (xid=0x4): frags=normal miss_send_len=0
 - `Error`, 用于主动向 controller 通报告警信息
 
 ## OpenFlow channel
-讲下 channel 建立的细节. (waiting for implementing)
+OpenFlow channel 负责 OpenFlow switch 和 OpenFlow controller 的消息交换.
+
+- 通常, 一个 controller 管理多个 OpenFlow channels (每个对应一个 OpenFlow switch)
+- 一个 OpenFlow switch 也能同时与多个 controller 建立通道.
+
+交换机需要通过用户配置的固定 IP 地址和指定端口与控制器建立通信. 由交换机主动发起连接, 支持 TCP 或者 TLS 加密. 需要注意在 channel 中的消息不会经 flow table 处理, 而是视为控制平面流量. 这里用 `openvswitch-testcontroller` 和 `openvswitch-switch` 做示例:
+```sh
+sudo ovs-testcontroller ptcp:6633 --verbose
+sudo ovs-vsctl set-controller ovs-br0 tcp:127.0.0.1:6633
+```
+
+![testcontroller](./img/testconotroller-example.png)
+
+- 这里若只关注连接过程所交换的消息, 可以看到 `OFPT_HELLO`, `OFPT_FEATURES_REQUEST`, `OFPT_SET_CONFIG`, `OFPT_FLOW_MOD` 等.
+
+在连接建立后, 双方立即发送 `OFPT_HELLO` 消息, 携带自身支持的最高协议版本号, 协商的规则为: 双方使用较小的版本号作为最终协议版本. 若版本不兼容, 接收方回复 `OFPT_ERROR` 消息并终止连接.
+
+当交换机与所有控制器失去连接时, 需进入下面两种模式之一:
+- `Fail Secure Mode`, 此时:
+    * 仅丢弃发往控制器的数据包, 现有流表继续生效并按超时老化
+    * 适用于需保持现有网络策略的场景
+- `Fail Standalone Mode`
+    * 退化为传统交换机/路由器, 所有流量通过 `OFPP_NORMAL` 端口处理
+    * 仅适用于 Hybrid 交换机
+
+若重新连接, 则由控制器主动删除或更新保留的流表.
+
+TLS 加密连接默认使用 `6633/tcp` 端口, 交换机和控制器通过交换用私钥签名的证书来认证 (switch certificate 和 controller certificate).
 
 # 结语
 细节还是看白皮书吧, 这里只是简单讲了下对我来说比较重要的知识点.
