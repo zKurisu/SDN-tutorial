@@ -445,8 +445,8 @@ s1.start([c0])
 - 这部分内容可以用 `net.start()` 来代替, 其自动调用 `net.build()` 以及内部节点的 `start` 方法
 
 ```python
-c0.start()
-s1.start([c0])
+CLI(net)
+net.stop()
 ```
 - `CLI(net)`, 用 `net` 信息启动一个交互界面
 - `net.stop()` 进行清理工作
