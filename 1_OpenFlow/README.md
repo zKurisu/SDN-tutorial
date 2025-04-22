@@ -40,7 +40,6 @@ wget https://opennetworking.org/wp-content/uploads/2013/02/conformance-test-spec
     * `hard timeout`, 无论是否有流量, 到达时间后强制删除
 - Cookie, 控制器定义的, 每一个 flow table entry 的标识符
 
-
 这里同样用 Open vSwitch 做示例, 命令的详细说明见 `2_OpenvSwitch` 章节.
 
 添加 10 条 flow entries, `table 0` 和 `table 1` 各包含 5 条:

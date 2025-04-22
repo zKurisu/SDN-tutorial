@@ -3,12 +3,12 @@
 
 Open vSwitch 是一个开源的高性能软交换机 (软件模拟的交换机), 主要用于虚拟化环境和 SDN. 其完整支持 OpenFlow 协议 (1.0 到 1.5), 便于与 controller 集成.
 
-## 结构
+# 结构
 ![openvswitch structure](./img/openvswitch-structure.png)
 
 主要组件的基本使用如下.
 
-### 安装
+# 安装
 对于 Ubuntu/Debian, 安装为:
 ```sh
 sudo apt-get install openvswitch-switch openvswitch-testcontroller openvswitch-common
@@ -19,29 +19,29 @@ sudo apt-get install openvswitch-switch openvswitch-testcontroller openvswitch-c
 sudo pacman -S openvswitch
 ```
 
-### ovs-vswitchd
+# ovs-vswitchd
 `ovs-vswitchd`, Open vSwitch VSwitch Daemon, OVS 的守护进程, 负责管理 OVS 交换机的行为, 包括处理数据包的转发, 维护流表等.
 
 ```sh
 sudo systemctl enable --now ovs-vswitchd.service
 ```
 
-### ovsdb-server
+# ovsdb-server
 `ovsdb-server`, Open vSwitch Database Server, OVS 的数据库服务器, 它存储了 OVS 的配置信息, 包括交换机端口, 流表等数据.
 
 ```sh
 sudo systemctl enable --now ovsdb-server.service
 ```
 
-### ovs-vsctl
+# ovs-vsctl
 `ovs-vsctl`, Open vSwitch VSwitch Control, 用于管理 OVS 交换机的配置, 可以创建, 删除, 修改交换机, 端口, 接口等
 
-#### 查看 OVS 版本和接口信息
+## 查看 OVS 版本和接口信息
 ```sh
 ovs-vsctl show
 ```
 
-#### 创建 bridge
+## 创建 bridge
 ```sh
 ovs-vsctl add-br br0
 ```
@@ -51,7 +51,7 @@ ovs-vsctl add-br br0
  ovs-vsctl add-br br0 -- set Bridge br0 fail-mode=secure
 ```
 
-#### 为 bridge 添加 port
+## 为 bridge 添加 port
 - 创建 normal port
 ```sh
 ovs-vsctl add-port br0 eth0
@@ -69,30 +69,30 @@ ovs-vsctl add-port br0 eth1 -- set Interface eth1 type=internal
 ovs-vsctl add-port br0 p1 -- set Interface ofport_request=1
 ```
 
-#### 删除 bridge
+## 删除 bridge
 ```sh
 ovs-vsctl del-br br0
 ```
 
-#### 查询 bridge 列表
+## 查询 bridge 列表
 ```sh
 ovs-vsctl list-br
 ```
 
-### ovs-ofctl
+# ovs-ofctl
 `ovs-ofctl`, Open vSwitch OpenFlow Control, 用于与 Open vSwitch 的流表进行交互, 可以添加, 修改, 删除流表项, 以及查询流表信息
 
-#### 修改 port 状态
+## 修改 port 状态
 ```sh
 ovs-ofctl mod-port br0 eth1 up
 ```
 
-#### 查看 bridge 状态
+## 查看 bridge 状态
 ```sh
 ovs-ofctl show br0
 ```
 
-#### 为 bridge 添加 flow entry
+## 为 bridge 添加 flow entry
 ```sh
 ovs-ofctl add-flow br0 \
     "table=0, dl_src=01:00:00:00:00:00/01:00:00:00:00:00, actions=drop"
@@ -112,7 +112,7 @@ ovs-ofctl add-flow br0 "table=0, priority=0, actions=resubmit(,1)"
 ```
 - `resubmit(,1)`, 语法是 `resubmit([port], [table_id])`, 表示将数据包重新提交到另一个流表进行处理, `port` 表示数据包在重新提交时应该从哪个端口进入
 
-#### 查看流表信息
+## 查看流表信息
 ```sh
 ovs-ofctl dump-flows br0 table=0
 ```
@@ -135,7 +135,7 @@ cookie=0x0, duration=1017.692s, table=0, n_packets=174, n_bytes=12124, priority=
 - `actions` 指定匹配后的操作
 
 
-#### 将数据包输出到指定端口
+## 将数据包输出到指定端口
 ```sh
 ovs-ofctl add-flow br0 "table=4 actions=output:1"
 ```
@@ -147,7 +147,7 @@ ovs-ofctl add-flow br0 "table=4 actions=1"
 
 也表明输出到 port 1.
 
-#### 移除 VLAN 标签
+## 移除 VLAN 标签
 ```sh
 ovs-ofctl add-flow br0 "table=4 actions=strip_vlan,2"
 ```
@@ -155,7 +155,7 @@ ovs-ofctl add-flow br0 "table=4 actions=strip_vlan,2"
     * `strip_vlan` 表明移除数据包的 VLAN 标签
     * `2` 表示将数据包转发到端口 2
 
-#### 删除 flow entry
+## 删除 flow entry
 删除指定 bridge 上全部流表规则:
 ```sh
 ovs-ofctl del-flows br0
@@ -166,8 +166,8 @@ ovs-ofctl del-flows br0
 ovs-ofctl del-flows br0 xxx
 ```
 
-### ovs-dpctl
-`ovs-dpctl`, Open vSwitch Datapath Control, 用于管理 OVS 的 datapath, 可以查看和管理内核 datapath 的接口和流表. 
+# ovs-dpctl
+`ovs-dpctl`, Open vSwitch Datapath Control, 用于管理 OVS 的内核 datapath.
 
 这里简单说明一下数据包的处理流程, 一般情况下:
 - 数据包到达网卡, 网卡通过 DMA 将数据包写入内核的环形缓冲区
@@ -211,7 +211,7 @@ system@ovs-system:
 sudo ovs-ofctl add-flow ovs-br0 "priority=100 actions=normal"
 ```
 
-### ovs-appctl
+# ovs-appctl
 `ovs-appctl`, Open vSwitch Application Control, 通常用于调试和监控, 与 OVS 守护进程交互.
 
 ```sh
