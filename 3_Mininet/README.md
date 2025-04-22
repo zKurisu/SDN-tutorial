@@ -450,3 +450,58 @@ net.stop()
 ```
 - `CLI(net)`, 用 `net` 信息启动一个交互界面
 - `net.stop()` 进行清理工作
+
+## Hello World 2
+上述 Hello world 示例也可以利用 `mininet.topo` 中提供的拓扑简写为:
+```python
+from mininet.net import Mininet
+from mininet.log import info, setLogLevel
+from mininet.cli import CLI
+from mininet.topo import MinimalTopo
+
+def run():
+    info("Create net...\n")
+    topo = MinimalTopo()
+    net = Mininet(topo=topo)
+
+    net.start()
+    CLI(net)
+    net.stop()
+
+if __name__ == "__main__":
+    setLogLevel("info")
+    run()
+```
+- `mininet.topo` 库, 提供了一系列快速创建拓扑的类
+- `MinimalTopo`, 包含 2 个 hosts, 连接一个 switch, switch 连接一个 controller
+
+## Hello World 3
+我们可以把自己的 `Hello World 1` 拓扑封装为一个类, 然后像 `Hello World 2` 那样添加到 net 中, 需要继承 `mininet.topo.Topo` 类且重载 `build` 方法:
+```python
+from mininet.net import Mininet
+from mininet.log import info, setLogLevel
+from mininet.cli import CLI
+from mininet.topo import Topo
+
+class MyMinimalTopo(Topo):
+    def build(self, **kwargs):
+        h1 = self.addHost("h1")
+        h2 = self.addHost("h2")
+        s1 = self.addSwitch("s1")
+
+        self.addLink(h1, s1)
+        self.addLink(h2, s1)
+
+def run():
+    info("Create net...\n")
+    topo = MyMinimalTopo()
+    net = Mininet(topo=topo)
+
+    net.start()
+    CLI(net)
+    net.stop()
+
+if __name__ == "__main__":
+    setLogLevel("info")
+    run()
+```
