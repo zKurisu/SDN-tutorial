@@ -113,48 +113,6 @@ mininet> h2 python -m SimpleHTTPServer 80 >& /tmp/http.log &
 mininet> h3 wget -O - h2
 ```
 
-## 定制 network
-可以用 python 编写特定的 network:
-```python
-
-"""Custom topology example: topo-2sw-2host.py
-
-Two directly connected switches plus a host for each switch:
-
-   host --- switch --- switch --- host
-
-Adding the 'topos' dict with a key/value pair to generate our newly defined
-topology enables one to pass in '--topo=mytopo' from the command line.
-"""
-
-from mininet.topo import Topo
-
-class MyTopo( Topo ):
-    "Simple topology example."
-
-    def build( self ):
-        "Create custom topo."
-
-        # Add hosts and switches
-        leftHost = self.addHost( 'h1' )
-        rightHost = self.addHost( 'h2' )
-        leftSwitch = self.addSwitch( 's3' )
-        rightSwitch = self.addSwitch( 's4' )
-
-        # Add links
-        self.addLink( leftHost, leftSwitch )
-        self.addLink( leftSwitch, rightSwitch )
-        self.addLink( rightSwitch, rightHost )
-
-
-topos = { 'mytopo': ( lambda: MyTopo() ) }
-```
-
-然后:
-```sh
-sudo mn --custom topo-2sw-2host.py --topo mytopo --test pingall
-```
-
 ## 指定 network topology
 用 `--topo` 加上参数即可:
 ```sh
@@ -269,9 +227,9 @@ mininet> h1 xterm
 
 可能会遇到报错:
 
-![xterm connection rejected](../img/mininet-xterm-X11-connection-rejected.png)
+![xterm connection rejected](./img/mininet-xterm-X11-connection-rejected.png)
 
-![xterm wrong](../img/mininet-host-xterm-wrong.png)
+![xterm wrong](./img/mininet-host-xterm-wrong.png)
 
 此时在启用时加上 `-E` 选项 (听说是环境变量没读到, 参考 [stackoverflow](https://stackoverflow.com/questions/38040156/xterm-not-working-in-mininet)).
 
@@ -281,7 +239,7 @@ sudo -E mn -x
 mininet> h1 xterm
 ```
 
-![xterm ok](../img/mininet-h1-xterm-ok.png)
+![xterm ok](./img/mininet-h1-xterm-ok.png)
 
 ## 查看一个 switch 与哪个 controller 相连
 ```sh
@@ -330,7 +288,7 @@ controller -v ptcp:6633
 # 抓包 OpenFlow 协议包
 需要配置 wireshark 端口:
 
-![wireshark configuration](../img/openflow-wireshark-add-port.png)
+![wireshark configuration](./img/openflow-wireshark-add-port.png)
 
 之后:
 ```sh
@@ -379,3 +337,116 @@ openflow_v4.type==10
 | 28     | `OFPT_MULTIPART_REQUEST`       | 控制器向交换机请求多部分统计信息（如流表统计、端口统计等）。         |
 | 29     | `OFPT_MULTIPART_REPLY`         | 交换机对 `MULTIPART_REQUEST` 的响应，包含多部分统计信息。            |
 
+# Python API
+可以通过 Python 接口, 编写自定义的网络拓扑结构. 一般通过官方的 example 脚本来学习:
+```sh
+git clone https://github.com/mininet/mininet
+cd mininet/examples
+```
+
+## Hello World
+```python
+from mininet.net import Mininet
+from mininet.log import info, setLogLevel
+from mininet.cli import CLI
+
+def run():
+    info("Create net...\n")
+    net = Mininet()
+
+    info("Add nodes to network\n")
+    h1 = net.addHost("h1")
+    h2 = net.addHost("h2")
+    s1 = net.addSwitch("s1")
+    c0 = net.addController("c0")
+
+    info("Add link between nodes\n")
+    net.addLink(h1, s1)
+    net.addLink(h2, s1)
+
+    net.build()
+    c0.start()
+    s1.start([c0])
+    CLI(net)
+    net.stop()
+
+if __name__ == "__main__":
+    setLogLevel("info")
+    run()
+```
+- 这里创建两个 host 连接一个 switch, 注意 switch 只有转发功能, 因此还要添加控制器.
+
+启动:
+```sh
+sudo python hello.py
+```
+
+![hello world](./img/mininet-hello-world-example-start.png)
+
+
+下面挨个解释:
+```python
+from mininet.net import Mininet
+
+info("Create net...\n")
+net = Mininet()
+```
+- `Mininet` 类的实例, 指代整个网络, 后续所有操作都是对该 net 进行修改, 比如添加 nodes, 添加 links, 启动 cli, 这里没传入任何参数
+
+```python
+from mininet.log import setLogLevel, debug, info, output, warning, error
+
+def log_example():
+    # 设置日志等级（例如改为 'debug' 可以看到所有等级的输出）
+    setLogLevel('debug')
+
+    # 打印不同等级的日志
+    debug("This is a DEBUG message - details for developers\n")
+    info("This is an INFO message - general progress\n")
+    output("This is OUTPUT - important results\n")
+    warning("This is a WARNING - potential issue\n")
+    error("This is an ERROR - something went wrong\n")
+
+if __name__ == "__main__":
+    log_example()
+```
+- 用来设置日志输出等级, 等级列表如下:
+    * `debug`
+    * `info`
+    * `output`
+    * `warning`
+    * `error`
+- 你可以尝试修改不同的日志等级, 查看输出, 如:
+    * `setLogLevel('debug')`, 会 `debug()` 以及更高等级输出的内容
+    * `setLogLevel('info')`, 会输出 `info()` 以及更高等级输出的内容
+    * 以此类推
+
+```python
+info("Add nodes to network\n")
+h1 = net.addHost("h1")
+h2 = net.addHost("h2")
+s1 = net.addSwitch("s1")
+c0 = net.addController("c0")
+
+info("Add link between nodes\n")
+net.addLink(h1, s1)
+net.addLink(h2, s1)
+```
+- 先往网络中添加节点, 然后在节点间添加 link, 才能连通
+
+```python
+net.build()
+c0.start()
+s1.start([c0])
+```
+- `net.build()` 负责将 `addHost`, `addSwitch` 等添加进来的逻辑节点进行实例化, 比如, 创建 Linux 网络命名空间, 创建虚拟接口, 创建 `veth pair` 进行实际绑定等
+- `c0.start()`, 启动控制器进程, 监听指定端口以等待交换机连接
+- `s1.start([c0])`, 启动 Open vSwitch 守护进程, 并连接到指定控制器
+- 这部分内容可以用 `net.start()` 来代替, 其自动调用 `net.build()` 以及内部节点的 `start` 方法
+
+```python
+c0.start()
+s1.start([c0])
+```
+- `CLI(net)`, 用 `net` 信息启动一个交互界面
+- `net.stop()` 进行清理工作
