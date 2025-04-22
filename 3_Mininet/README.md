@@ -555,8 +555,3 @@ if __name__ == "__main__":
 ```
 
 ![](./img/mininet-setIP-example-result.png)
-
-
-
-
-
