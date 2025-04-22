@@ -505,3 +505,58 @@ if __name__ == "__main__":
     setLogLevel("info")
     run()
 ```
+
+## mininet.util
+`mininet.util` 提供一些工具函数:
+```python
+from mininet.util import quietRun
+result = quietRun("ovs-vsctl show")
+```
+- `quietRun` 用于运行 shell 命令并返回输出, 但不打印到控制台
+
+## Host 类常用方法
+```python
+h1 = net.addHost("h1")
+```
+- 这里的 `h1` 是 `Host` 类的实例, 可以运行 shell 命令, 设置 IP, MAC, 读取 IP, MAC 等等, 具体内容可以查看 `mininet.node.Node` 类的实现
+
+### 设置 IP 并尝试 `ping` 命令
+```python
+from mininet.net import Mininet
+from mininet.log import info, setLogLevel
+
+def run():
+    info("Create net...\n")
+    net = Mininet()
+
+    h1 = net.addHost("h1")
+    h2 = net.addHost("h2")
+    s1 = net.addSwitch("s1")
+    c0 = net.addController("c0")
+
+    net.addLink(h1, s1)
+    net.addLink(h2, s1)
+
+    net.start()
+    c0.start()
+
+    h1.setIP("10.10.1.1", 24)
+    h2.setIP("10.10.1.2", 24)
+    info(f"h1 ip: {h1.IP()}\n")
+    info(f"h2 ip: {h2.IP()}\n")
+    result = h1.cmd("ping -c 2 10.10.1.2")
+    info(f"h1 ping -c 2 h2 result:\n{result}")
+
+    net.stop()
+
+if __name__ == "__main__":
+    setLogLevel("info")
+    run()
+```
+
+![](./img/mininet-setIP-example-result.png)
+
+
+
+
+
