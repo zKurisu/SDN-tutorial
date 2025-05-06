@@ -139,3 +139,21 @@ super(ChildClass, self).method(args)
 - `ChildClass` 表明从哪个类开始查找父类
 - `self` 指明用哪个实例来调用父类的方法
 
+# OpenFlow 版本协商
+大多时候, 可以显示指定使用的 OpenFlow 版本:
+
+```python
+from ryu.ofproto import ofproto_v1_0
+
+class L2Switch(app_manager.RyuApp):
+    OFP_VERSIONS = [ofproto_v1_0.OFP_VERSION]
+    ...
+```
+(完整示例在 `./codes/hello_ofp_version.py` 文件)
+
+- `ofproto_v1_0` 库, 指 `ryu/ofproto/ofproto_v1_0.py` 文件, 该文件中定义了一系列与 OpenFlow v1.0 相关的常量, 如:
+    * OpenFlow v1.0 版本: `OFP_VERSION = 0x01`
+    * 消息类型, 如 `OFPT_HELLO = 0`, `OFPT_SET_CONFIG = 9`
+    * Command 类型, 如 `OFPFC_ADD = 0`, `OFPFC_DELETE = 3`
+    * Action 类型, 如 `OFPAT_OUTPUT = 0`
+- `OFP_VERSION` 类变量 (列表, 可以指定多个版本) 会被 `ryu-manager` 自动读取
