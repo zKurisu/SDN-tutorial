@@ -189,3 +189,58 @@ class xxx:
     * `xid`, transaction id
     * `buf`, Raw data
 - `timestamp`, Datapath 实例创建的时间戳
+
+# `OFP_HELLO` Example
+这里用 Open vSwitch, Ryu 做一个 `OFP_HELLO` 事件的演示, 该事件仅用于建立底层 TCP 连接, 确认通信双方支持的最低 OpenFlow 版本, `OFP_HELLO` 消息本身是一个空消息 (或仅包含基础头部), 不携带版本号或其他配置信息.
+
+实际的版本协商是通过后续的 `OFPT_FEATURES_REQUEST/REPLY` 完成的 (在 `CONFIG_DISPATCHER` 阶段).
+
+
+准备工作如下:
+```sh
+sudo systemctl start ovs-vswitchd.service
+sudo systemctl start ovsdb-server
+sudo ovs-vsctl add-br ovs-br1
+```
+
+Ryu 控制器代码:
+```python
+from ryu.base import app_manager
+from ryu.controller import ofp_event
+from ryu.controller.handler import set_ev_cls, HANDSHAKE_DISPATCHER
+from ryu.ofproto import ofproto_v1_0
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+class L2Switch(app_manager.RyuApp):
+    OFP_VERSION = [ofproto_v1_0.OFP_VERSION]
+    def __init__(self, *args, **kwargs):
+        super(L2Switch, self).__init__(*args, **kwargs)
+        logging.debug("Hello Ryu Init!")
+
+    @set_ev_cls(ofp_event.EventOFPHello, HANDSHAKE_DISPATCHER)
+    def hello_handler(self, ev):
+        datapath = ev.msg.datapath
+        logging.debug(f"In OFP_HELLO Handler")
+```
+
+之后运行:
+```sh
+ryu-manager --verbose --ofp-tcp-listen-port 6654 hello_msg_test.py
+sudo ovs-vsctl set-controller ovs-br1 tcp:127.0.0.1:6654
+```
+
+输出:
+```
+...
+connected socket:<eventlet.greenio.base.GreenSocket object at 0x74d55e29fa30> address:('127.0.0.1', 35298)
+EVENT ofp_event->L2Switch EventOFPHello
+hello ev <ryu.controller.ofp_event.EventOFPHello object at 0x74d55e2f63d0>
+move onto config mode
+In OFP_HELLO Handler
+switch features ev version=0x6,msg_type=0x6,msg_len=0x20,xid=0x937b4ea6,OFPSwitchFeatures(auxiliary_id=0,capabilities=591,datapath_id=117111234183759,n_buffers=0,n_tables=254)
+move onto main mode
+```
+
+这里也可以看到 DPID 的获取以及 OpenFlow 具体版本的协商是在 `CONFIG_DISPATCHER` 阶段, 通过 switch feature 获得.
+
