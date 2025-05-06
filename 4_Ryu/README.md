@@ -157,3 +157,35 @@ class L2Switch(app_manager.RyuApp):
     * Command 类型, 如 `OFPFC_ADD = 0`, `OFPFC_DELETE = 3`
     * Action 类型, 如 `OFPAT_OUTPUT = 0`
 - `OFP_VERSION` 类变量 (列表, 可以指定多个版本) 会被 `ryu-manager` 自动读取
+
+# `xxx_DISPATCHER`
+`xxx_DISPATCHER` 定义在 `ryu/controller/handler.py` 文件中, 指的是 OpenFlow 通信的阶段, 每个阶段会发生不同的事件, 包括下面 4 个 (阶段按顺序进行):
+- `HANDSHAKE_DISPATCHER`, 握手阶段, 有 `EventOFPHello` 等
+- `CONFIG_DISPATCHER`, 配置阶段, 有 `EventOFPSwitchFeatures`, `EventOFPSetConfig` 等
+- `MAIN_DISPATCHER`, 主调度阶段 (正常工作状态), 有 `EventOFPPacketIn`, `EventOFPPortStatus` 等
+- `DEAD_DISPATCHER`, 断开连接阶段, 有 `EventOFPStateChange` 等
+
+这些事件类 (如 `EventOFPSwitchFeatures`) 定义在 `ryu/controller/ofp_event.py` 中, 但大部分类是通过消息名动态生成的, 如 `OFP_HELLO` 消息对应 `EventOFPHello` 类, `OFP_SET_CONFIG` 对应 `EventOFPSetConfig`.
+
+Ryu 控制器是事件驱动 (事件触发时由对应函数处理), 需要指定事件并绑定 handler 函数来处理. 这里需要用到 `ryu/controller/handler.py` 中定义的 `set_ev_cls` 修饰器, 语法如:
+```python
+from ryu.controller import ofp_event
+from ryu.controller.handler import set_ev_cls
+
+class xxx:
+    ...
+    @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
+    def xxx_handler(self, ev):
+        pass
+```
+- 最重要的是 `ev` 参数, 其代表该事件类 (比如这里是 `EventOFPPacketIn`), 含消息体, datapath 等信息
+
+所有的事件消息类, 都继承自 `ryu/controller/ofp_event.py` 中定义的 `EventOFPMsgBase` 类, 包含 2 个成员:
+- `msg`, 一个 OpenFlow message 实例, 继承自 `ryu/ofproto/ofproto_parser.py` 中定义的 `MsgBase`, 主要成员有:
+    * `datapath`, 一个 `ryu.controller.controller.Datapath` 实例
+    * `version`, OpenFlow protocol 的版本信息
+    * `msg_type`, OpenFlow message 的类型, 定义在 `ofproto/ofproto_v1_3.py` 文件, 前缀为 `OFPT` (大概)
+    * `msg_len`, 消息长度
+    * `xid`, transaction id
+    * `buf`, Raw data
+- `timestamp`, Datapath 实例创建的时间戳
