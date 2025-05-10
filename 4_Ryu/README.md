@@ -404,3 +404,135 @@ sudo ovs-ofctl dump-flows ovs-br0
 ```
  cookie=0x0, duration=53.595s, table=0, n_packets=0, n_bytes=0, priority=0 actions=CONTROLLER:65535
 ```
+- `cookie`, 流表项的标识符 (如果 controller 端也记录了 `cookie`, 就知道是哪个流表项被删除了)
+- `duration`, 该流表项已存在的时间, 以 seconds 为单位
+- `table`, 流表项所属的 table id
+- `n_packets`, 该流表项已处理的数据包数量
+- `n_bytes`, 该流表项已处理的数据字节大小
+- `priority`, 流表项的优先级
+- `actions`, 指匹配后的行为, 这里是发送给 controller
+
+# PacketIn Example
+根据 Table-miss 流表项:
+```
+ cookie=0x0, duration=53.595s, table=0, n_packets=0, n_bytes=0, priority=0 actions=CONTROLLER:65535
+```
+
+数据包主动发往 controller 之后, 会被识别为 `PacketIn` 数据包, 在 Ryu 的事件框架下, 触发 `EventOFPPacketIn` 事件. 因此对应的事件处理程序可以为:
+```python
+from ryu.lib.packet import packet
+from ryu.lib.packet import ethernet
+from ryu.lib.packet import ether_types
+
+...
+@set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
+def packet_in_handler(self, ev):
+    msg = ev.msg
+    datapath = msg.datapath
+    ofproto = datapath.ofproto
+    parser = datapath.ofproto_parser
+
+    pkt = packet.Packet(msg.data)
+    eth = pkt.get_protocols(ethernet.ethernet)[0]
+
+    if eth.ethertype == ether_types.ETH_TYPE_LLDP:
+        # ignore lldp packet
+        return
+    dst = eth.dst
+    src = eth.src
+    logging.debug(f"{src} want to find {dst}")
+```
+- `packet` 是 `ryu.lib.packet.packet` 库, 主要定义了 `Packet` 类, 用来解析或创建数据帧, 这里创建了一个 `Packet` 对象:
+    * `get_protocols()` 方法, 返回一个列表, 包含匹配指定 `protocol` 的类, 这里是 `ethernet.ethernet`
+- `ethernet` 是 `ryu.lib.packet.ethernet` 库, 主要定义了 `ethernet` 类
+- `ether_types` 是 `ryu.lib.packet.ether_types` 库, 定义了一些协议常量, 如 `ETH_TYPE_LLDP`, `ETH_TYPE_IP` 等
+
+这个程序会输出发送者和目标的 ip.
+
+完整程序为:
+```python
+from ryu.base import app_manager
+from ryu.controller import ofp_event
+from ryu.controller.handler import set_ev_cls, CONFIG_DISPATCHER, MAIN_DISPATCHER
+from ryu.ofproto import ofproto_v1_0
+from ryu.lib.packet import packet
+from ryu.lib.packet import ethernet
+from ryu.lib.packet import ether_types
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
+class L2Switch(app_manager.RyuApp):
+    OFP_VERSION = ofproto_v1_0
+    def __init__(self, *args, **kwargs):
+        super(L2Switch, self).__init__(*args, **kwargs)
+        logging.debug("Hello Ryu Init!")
+    
+    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+    def switch_features_handler(self, ev):
+        datapath = ev.msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        buffer_id = None
+        match = parser.OFPMatch()
+        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
+                                        ofproto.OFPCML_NO_BUFFER)]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                                actions)]
+        logging.debug("Send mod msg...")
+        
+        if buffer_id:
+            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
+                                    priority=0, match=match,
+                                    instructions=inst)
+        else:
+            mod = parser.OFPFlowMod(datapath=datapath, priority=0,
+                                    match=match, instructions=inst)
+        datapath.send_msg(mod)
+        logging.debug("Fin send mod msg...")
+    
+    @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
+    def packet_in_handler(self, ev):
+        msg = ev.msg
+        datapath = msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        pkt = packet.Packet(msg.data)
+        eth = pkt.get_protocols(ethernet.ethernet)[0]
+
+        if eth.ethertype == ether_types.ETH_TYPE_LLDP:
+            # ignore lldp packet
+            return
+        dst = eth.dst
+        src = eth.src
+        logging.debug(f"{src} want to find {dst}")
+```
+
+运行:
+```sh
+ryu-manager --verbose --ofp-tcp-listen-port 6654 packet_in_test.py
+```
+
+这里借助 Mininet 来测试:
+```sh
+sudo mn --topo tree,depth=1,fanout=2 --controller remote,ip=127.0.0.1,port=6654
+```
+
+输出:
+```
+...
+move onto main mode
+EVENT ofp_event->L2Switch EventOFPPacketIn
+82:b2:a1:cb:5b:45 want to find 33:33:00:00:00:16
+EVENT ofp_event->L2Switch EventOFPPacketIn
+fe:53:97:82:08:b6 want to find 33:33:00:00:00:16
+EVENT ofp_event->L2Switch EventOFPPacketIn
+82:b2:a1:cb:5b:45 want to find ff:ff:ff:ff:ff:ff
+EVENT ofp_event->L2Switch EventOFPPacketIn
+```
+
+由于 ARP 也没有响应, 因此 `h1` 也不知道 `h2` 的 IP, 会发送一些广播报文寻找.
+
+一个能用的示例可以是官方 examples 中的 `simple_switch_13.py`, 相信你现在能看懂了. 后续也会解释这些脚本.
