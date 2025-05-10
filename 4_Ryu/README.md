@@ -200,7 +200,7 @@ class xxx:
 ```sh
 sudo systemctl start ovs-vswitchd.service
 sudo systemctl start ovsdb-server
-sudo ovs-vsctl add-br ovs-br1
+sudo ovs-vsctl add-br ovs-br0
 ```
 
 Ryu 控制器代码:
@@ -227,7 +227,7 @@ class L2Switch(app_manager.RyuApp):
 之后运行:
 ```sh
 ryu-manager --verbose --ofp-tcp-listen-port 6654 hello_msg_test.py
-sudo ovs-vsctl set-controller ovs-br1 tcp:127.0.0.1:6654
+sudo ovs-vsctl set-controller ovs-br0 tcp:127.0.0.1:6654
 ```
 
 输出:
@@ -244,3 +244,163 @@ move onto main mode
 
 这里也可以看到 DPID 的获取以及 OpenFlow 具体版本的协商是在 `CONFIG_DISPATCHER` 阶段, 通过 switch feature 获得.
 
+# EventOFPSwitchFeatures Example
+同样用 Open vSwitch 做演示 (如果没有创建的话):
+```sh
+sudo systemctl start ovs-vswitchd.service
+sudo systemctl start ovsdb-server
+sudo ovs-vsctl add-br ovs-br0
+```
+
+Ryu 控制器代码:
+```python
+from ryu.base import app_manager
+from ryu.controller import ofp_event
+from ryu.controller.handler import set_ev_cls, CONFIG_DISPATCHER
+from ryu.ofproto import ofproto_v1_0
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
+class L2Switch(app_manager.RyuApp):
+    OFP_VERSION = ofproto_v1_0
+    def __init__(self, *args, **kwargs):
+        super(L2Switch, self).__init__(*args, **kwargs)
+        logging.debug("Hello Ryu Init!")
+
+    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+    def switch_feature_handler(self, ev):
+        msg = ev.msg
+        datapath = msg.datapath
+        logging.debug(f"In OFP_Switch_Feature: {datapath.id}")
+```
+
+之后运行:
+```sh
+ryu-manager --verbose --ofp-tcp-listen-port 6654 switch_feature_test.py
+sudo ovs-vsctl set-controller ovs-br0 tcp:127.0.0.1:6654
+```
+
+输出:
+```
+...
+move onto config mode
+EVENT ofp_event->L2Switch EventOFPSwitchFeatures
+switch features ev version=0x6,msg_type=0x6,msg_len=0x20,xid=0x499ce0ef,OFPSwitchFeatures(auxiliary_id=0,capabilities=591,datapath_id=117111234183759,n_buffers=0,n_tables=254)
+In OFP_Switch_Feature: 117111234183759
+move onto main mode
+```
+
+## 添加 Table miss 流表项
+在 switch feature 阶段, 一般用来设置 table miss 流表项 (默认流表项, 当啥都没匹配到时触发), 代码如下:
+```python
+@set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+def switch_features_handler(self, ev):
+    datapath = ev.msg.datapath
+    ofproto = datapath.ofproto
+    parser = datapath.ofproto_parser
+
+    match = parser.OFPMatch()
+    actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
+                                      ofproto.OFPCML_NO_BUFFER)]
+    inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                            actions)]
+    if buffer_id:
+        mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
+                                priority=priority, match=match,
+                                instructions=inst)
+    else:
+        mod = parser.OFPFlowMod(datapath=datapath, priority=0,
+                                match=match, instructions=inst)
+    datapath.send_msg(mod)
+```
+- `datapath` 是 `ryu.controller.controller.Datapath` 对象, 表示 controller 与一个 openflow switch 的连接信息, 其成员有:
+    * `id`, `64` 位 10 进制数表示的 Datapath ID
+    * `ofproto`, 导入的 `ryu.ofproto.ofproto_v1_x` 模块
+    * `ofproto_parser`, 导入的 `ryu.ofproto.ofproto_parser` 模块
+- `ofproto` 模块中定义了与 OpenFlow 秀逸相关的常量和数据结构, 这里用到了:
+    * `ofproto.OFPP_CONTROLLER`, 指定与 controller 连接的端口
+    * `ofproto.OFPCML_NO_BUFFER`, 表示没有要直接处理的数据包
+    * `ofproto.OFPIT_APPLY_ACTIONS`, 表示立即执行 Actions
+- `ofproto_parser` 模块, 用于创建流表匹配项, Action 等类的实例:
+    * `OFPMatch` 类, 用于流表匹配, 这里为空, 表示空匹配
+    * `OFPActionOutput` 类, 输出动作, 需要指定输出端口和数据包长度
+    * `OFPInstructionActions` 类, 指定对一组 actions 的 instruction, 即如何执行这一组 actions
+    * `OFPFlowMod` 类, 修改流表项
+
+一个基本的流程就是:
+- 创建匹配项
+- 创建 Actions
+- 创建 Instruction
+- 创建 OFPFlowMod 消息
+- 发送 OFPFlowMod 消息
+
+完整程序如下:
+```python
+from ryu.base import app_manager
+from ryu.controller import ofp_event
+from ryu.controller.handler import set_ev_cls, CONFIG_DISPATCHER
+from ryu.ofproto import ofproto_v1_0
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
+class L2Switch(app_manager.RyuApp):
+    OFP_VERSION = ofproto_v1_0
+    def __init__(self, *args, **kwargs):
+        super(L2Switch, self).__init__(*args, **kwargs)
+        logging.debug("Hello Ryu Init!")
+    
+    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+    def switch_features_handler(self, ev):
+        datapath = ev.msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+
+        buffer_id = None
+        match = parser.OFPMatch()
+        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER,
+                                        ofproto.OFPCML_NO_BUFFER)]
+        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,
+                                                actions)]
+        logging.debug("Send mod msg...")
+        
+        if buffer_id:
+            mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
+                                    priority=0, match=match,
+                                    instructions=inst)
+        else:
+            mod = parser.OFPFlowMod(datapath=datapath, priority=0,
+                                    match=match, instructions=inst)
+        datapath.send_msg(mod)
+        logging.debug("Fin send mod msg...")
+```
+
+运行:
+```sh
+ryu-manager --verbose --ofp-tcp-listen-port 6654 mod_flow_test.py
+sudo ovs-vsctl set-controller ovs-br0 tcp:127.0.0.1:6654
+```
+
+输出:
+```
+...
+connected socket:<eventlet.greenio.base.GreenSocket object at 0x7c49c6294a30> address:('127.0.0.1', 33538)
+hello ev <ryu.controller.ofp_event.EventOFPHello object at 0x7c49c62eb400>
+move onto config mode
+EVENT ofp_event->L2Switch EventOFPSwitchFeatures
+switch features ev version=0x6,msg_type=0x6,msg_len=0x20,xid=0x779bada7,OFPSwitchFeatures(auxiliary_id=0,capabilities=591,datapath_id=117111234183759,n_buffers=0,n_tables=254)
+Send mod msg...
+Fin send mod msg...
+move onto main mode
+```
+
+用 `ovs` 工具集查看:
+```sh
+sudo ovs-ofctl dump-flows ovs-br0
+```
+
+输出:
+```
+ cookie=0x0, duration=53.595s, table=0, n_packets=0, n_bytes=0, priority=0 actions=CONTROLLER:65535
+```
