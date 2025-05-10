@@ -536,3 +536,134 @@ EVENT ofp_event->L2Switch EventOFPPacketIn
 由于 ARP 也没有响应, 因此 `h1` 也不知道 `h2` 的 IP, 会发送一些广播报文寻找.
 
 一个能用的示例可以是官方 examples 中的 `simple_switch_13.py`, 相信你现在能看懂了. 后续也会解释这些脚本.
+
+# WSGI 北向接口
+Ryu 在 `ryu/app/wsgi.py` 文件中实现了 WSGI 服务, 可以用来创建 REST API.
+
+```python
+from ryu.app.wsgi import WSGIApplication, ControllerBase, route 
+```
+- `WSGIApplication` 是一个符合 WSGI 的应用实例, 需要在 `RyuApp` 中通过 `_CONTEXTS` 注入
+- `ControllerBase`, 所有 REST API 控制器必须继承此类, 提供与 HTTP 请求交互的基础能力, 该类的 `__init__` 函数签名需要为:
+    * `def __init__(self, req, link, data, **config):`
+    * `req` 是一个 `webob.Request` 实例, 包含 `method`, `path`, `headers`, `body`, `json`, `cookies` 等成员
+    * `link` 是控制器与 WSGI 之间的链接对象, 一般内部管理, 不常使用
+    * `data` 是 `wsgi.register` 时传入的第二个参数
+    * `**config`, 其他配置, 通常为空
+- `route` 是用于注册 API 的修饰器
+
+## 简单示例
+```python
+from ryu.base import app_manager
+from ryu.app.wsgi import WSGIApplication, route, ControllerBase
+from webob import Response
+
+class TestRest(app_manager.RyuApp):
+    _CONTEXTS = { 'wsgi': WSGIApplication }
+
+    def __init__(self, *args, **kwargs):
+        super(TestRest, self).__init__(*args, **kwargs)
+        wsgi = kwargs['wsgi']
+        wsgi.register(RestController, {})
+
+class RestController(ControllerBase):
+    def __init__(self, req, link, data, **configs):
+        super(RestTest, self).__init__(req, link, data, **configs)
+
+    @route("Test", "/hello/{name}", methods=['GET'])
+    def _hello_wsgi(self, req, **kwargs):
+        name = kwargs['name']
+        print("................")
+        print(req)
+        print("................")
+        return Response(status=200, text=f"Hello {name}")
+```
+- 定义的 `_CONTEXTS`,来初始化一个 `WSGIApplication`, 这里 `{'wgsi': WSGIApplication}` 是创建一个 `WSGIApplication` 实例作为键值
+- 在定义 `_CONTEXTS` 的类中, 可以用 `kwargs[key]` 来获取对应值
+- `register` 方法, 接受两个参数:
+    * 第一个参数: 指定哪一个类来处理 HTTP 请求
+    * 第二个参数: 传递给指定类的 data (以便在指定类中使用)
+- 这里 `{simple_switch_instance_name: self}` 就可以在 `SimpleSwitchController` 中通过 `data.simple_switch_instance_name` 来调用当前类了
+- `route` 修饰器接受四个参数:
+    * 第一个参数, 任意名称, 用于标识此 route
+    * 第二个参数, 指定 url 格式, 如 `'/simpleswitch/mactable/{dpid}'`, 这里 `/simpleswitch/mactable/` 之后的字符串会保存在 `dpid` 变量中且可以在后续函数中使用
+    * 第三个参数, 指定 HTTP method, 
+    * 第四个参数, 指定 url 中的参数需要匹配的格式, 比如这里 `dpid` 需要匹配 `dpid_lib.DPID_PATTERN`
+
+`wsgi` 默认在 `8080` 端口启用.
+
+然后:
+```sh
+curl -X GET "http://127.0.0.1:8080/hello/Jie"
+```
+
+输出:
+```
+loading app wsgi_test.py
+creating context wsgi
+instantiating app wsgi_test.py of TestRest
+BRICK TestRest
+(503857) wsgi starting up on http://0.0.0.0:8080
+(503857) accepted ('127.0.0.1', 45558)
+................
+GET /hello/Jie HTTP/1.0
+Accept: */*
+Content-Type: text/plain
+Host: 127.0.0.1:8080
+User-Agent: curl/8.13.0
+................
+127.0.0.1 - - [10/May/2025 18:13:22] "GET /hello/Jie HTTP/1.1" 200 124 0.001295
+```
+
+## 手动绑定 URL 和方法
+用 `wsgi.mapper` 对象:
+```python
+mapper = wsgi.mapper
+path = '/stats'
+uri = path + '/switches'
+mapper.connect(
+    'stats',                  # 路由名称（唯一标识）
+    uri,                      # URL 路径（/stats/switches）
+    controller=StatsController, # 控制器类
+    action='get_dpids',       # 调用的方法名
+    conditions=dict(method=['GET'])  # 限制仅允许 GET 方法
+)
+```
+
+如:
+```python
+from ryu.base import app_manager
+from ryu.app.wsgi import WSGIApplication, ControllerBase, route
+from webob import Response
+import json
+
+class SimpleSwitch(app_manager.RyuApp):
+    _CONTEXTS = { 'wsgi': WSGIApplication }
+
+    def __init__(self, *args, **kwargs):
+        super(SimpleSwitch, self).__init__(*args, **kwargs)
+        wsgi = kwargs['wsgi']
+        wsgi.register(RestTest, { "ryu_application": self })
+
+        mapper = wsgi.mapper
+        mapper.connect(
+            "Test",
+            "/hello/{name}",
+            controller=RestTest,
+            action="_handle_hello",
+            conditions=dict(method=['GET'])
+        )
+
+class RestTest(ControllerBase):
+    def __init__(self, req, link, data, **configs):
+        super(RestTest, self).__init__(req, link, data, **configs)
+
+    def _handle_hello(self, req, name, **kwargs):
+        print(f"Oh my {name}")
+        data = {"Jie": "hello", "Kurise": "love"}
+        body = json.dumps(data).encode('utf-8')
+        return Response(content_type="application/json", body=body)
+```
+
+# 结语
+看啥时候做 examples 的分析吧, 现在这些也基本够用了感觉.
